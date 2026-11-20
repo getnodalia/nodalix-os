@@ -1,6 +1,7 @@
 # Brújula, the Nodalix web browser (Rust, WebKit, Nodalia Design Language), built from
 # getnodalia/brujula pinned to a verified release commit. The independent
 # browser package version is not tied to the Nodalix OS VERSION.
+# Standalone build and signed publication: .github/workflows/brujula-package.yml.
 pkgname=nodalix-brujula
 pkgver=0.10.0
 pkgrel=1
@@ -22,7 +23,7 @@ sha256sums=('SKIP')
 # The C code of its dependencies (SQLite and ring) is compiled by cc with makepkg's -flto and then
 # linked by lld, which cannot read those objects: undefined sqlite3_* and ring_core_* symbols.
 # The native apps (nodalix-native-apps) build without LTO for the same reason.
-options=('!lto')
+options=('!lto' '!debug')
 
 prepare() {
   cd "$srcdir/brujula"

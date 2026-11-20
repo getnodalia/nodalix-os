@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = 'getnodalia/nodalix-os'
+RELEASES_FILE = ROOT / 'dist/history-input/releases.json'
 from versioning import compare_versions
 
 def fetch(url):
@@ -15,12 +16,22 @@ def fetch(url):
         '--url', url,
     ])
 
+def load_releases(path):
+    """Load the release index supplied by the authenticated CI runner."""
+    releases = json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(releases, list):
+        raise ValueError('GitHub releases index must be a JSON list')
+    return releases
+
 def main():
     if os.environ.get('NODALIX_CI_CONTAINER') != '1':
         raise SystemExit('Disposable CI container required')
     subprocess.run(['pacman','-Syu','--noconfirm'], check=True)
     subprocess.run(['pacman','-S','--needed','--noconfirm','python','libarchive','git','diffutils','curl'], check=True)
-    releases = json.loads(fetch(f'https://api.github.com/repos/{REPOSITORY}/releases?per_page=100'))
+    # The release index is fetched on the GitHub runner with a read-only
+    # GITHUB_TOKEN. Do not pass that token into this container: historical
+    # upgrades run package hooks and other untrusted executable code.
+    releases = load_releases(RELEASES_FILE)
     candidates = ROOT/'dist/packages'
     evidence = ROOT/'dist/history-evidence'
     evidence.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,111 @@
+name: Build and publish Brújula independently
+
+# Only browser changes use this pipeline. Review still happens in PRs;
+# signing is possible only from main and the protected environment.
+on:
+  push:
+    branches: [main]
+    paths:
+      - packaging/nodalix-brujula/PKGBUILD
+      - release/components.json
+  pull_request:
+    paths:
+      - packaging/nodalix-brujula/PKGBUILD
+      - release/components.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Share the publication lock with the full repository publisher. Never let two
+# complete GitHub Pages deployments race or overwrite each other.
+concurrency:
+  group: ${{ github.ref == 'refs/heads/main' && 'publish-pacman-repo' || format('brujula-verify-{0}', github.ref) }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'getnodalia/nodalix-os'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Compile and test Brújula only (no kernel or ISO)
+        run: |
+          docker run --rm -e NODALIX_CI_CONTAINER=1 \
+            -v "$PWD":/src -w /src archlinux:latest \
+            bash tools/ci-build-brujula.sh
+          sudo chown -R "$(id -u):$(id -g)" dist/brujula-package
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nodalix-brujula-candidate
+          path: dist/brujula-package/*
+          if-no-files-found: error
+          retention-days: 14
+
+  sign:
+    needs: build
+    if: >-
+      github.repository == 'getnodalia/nodalix-os' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: nodalix-repo-signing
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify publication uses the current reviewed main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          [[ "$current" == "$GITHUB_SHA" ]] || {
+            echo 'main has advanced; refusing to publish an obsolete package' >&2
+            exit 1
+          }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nodalix-brujula-candidate
+          path: dist/brujula-package
+      - name: Preserve signed packages, replace Brújula and sign complete repository
+        env:
+          NODALIX_REPO_GPG_KEY: ${{ secrets.NODALIX_REPO_GPG_KEY }}
+          NODALIX_REPO_GPG_PASSPHRASE: ${{ secrets.NODALIX_REPO_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          docker run --rm -e NODALIX_CI_CONTAINER=1 \
+            -e NODALIX_REPO_GPG_KEY -e NODALIX_REPO_GPG_PASSPHRASE \
+            -v "$PWD":/src -w /src archlinux:latest \
+            bash tools/ci-publish-brujula.sh
+          sudo chown -R "$(id -u):$(id -g)" dist/pages
+      - name: Verify main still points to the built version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          [[ "$current" == "$GITHUB_SHA" ]] || exit 1
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: dist/pages
+
+  deploy:
+    needs: sign
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

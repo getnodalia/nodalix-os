@@ -50,7 +50,7 @@ jobs:
           git push origin "HEAD:refs/heads/$branch"
           gh pr create --base main --head "$branch" \
             --title "chore(brujula): update to $VERSION independently of Nodalix" \
-            --body "Automated proposal from the latest stable getnodalia/brujula GitHub Release. The PKGBUILD pins the exact Git commit, not a floating tag. Review upstream changes, run CI and merge only after validation. The signed pacman repository is published after a successful main-branch CI run without changing the Nodalix OS version or ISO."
+            --body "Automated proposal from the latest stable getnodalia/brujula GitHub Release. The PKGBUILD pins the exact Git commit, not a floating tag. Review upstream changes and the dedicated browser package build before merging. A browser-only workflow signs and publishes the reviewed package from main; it does not compile the Nodalix OS kernel or ISO."
           # GITHUB_TOKEN-created PRs do not start pull_request workflows. Explicit
-          # dispatch runs the existing CI on the exact proposed branch instead.
-          gh workflow run ci.yml --ref "$branch"
+          # dispatch runs the dedicated browser build on the proposed branch.
+          gh workflow run brujula-package.yml --ref "$branch"

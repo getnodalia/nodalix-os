@@ -17,14 +17,19 @@ la firma y comprueba que una base de datos manipulada se rechaza.
 ## Cómo se publica
 
 El repositorio vive en GitHub Pages: `https://getnodalia.github.io/nodalix-os/x86_64`.
-Lo publica el workflow **Publish pacman repository**. Se puede ejecutar
-manualmente (`workflow_dispatch`) con el id de una ejecución correcta de CI
-en `main`; además, cuando una actualización independiente de Brújula modifica
-su PKGBUILD en `main`, la publicación se inicia automáticamente después de
-completarse con éxito la CI de ese mismo commit. Tanto la ruta automática
-como la manual requieren comprobar la identidad, el SHA y el estado de CI.
-El workflow descarga los paquetes verificados
-(`nodalix-0.4.0-candidate`). `tools/ci-publish-repo.sh`:
+Lo publica el workflow **Publish pacman repository** para versiones completas
+de Nodalix, ejecutado manualmente (`workflow_dispatch`) con una CI de `main`
+correcta y del commit actual. Descarga `nodalix-0.4.0-candidate`, verifica
+la identidad, el SHA y el estado de la CI, y firma el repositorio.
+
+Las actualizaciones **exclusivas de Brújula** usan otro workflow:
+`brujula-package.yml`. Compila únicamente `nodalix-brujula`; desde la rama
+protegida `main`, verifica el repositorio publicado y cada uno de sus paquetes
+mediante firmas y SHA-256, sustituye el navegador y vuelve a publicar el conjunto
+firmado. Ambos workflows comparten el bloqueo de publicación para evitar
+despliegues simultáneos.
+
+`tools/ci-publish-repo.sh`:
 
 1. importa la clave privada del secreto `NODALIX_REPO_GPG_KEY` (y, si existe, su
    contraseña en `NODALIX_REPO_GPG_PASSPHRASE`) y comprueba que su huella es la del

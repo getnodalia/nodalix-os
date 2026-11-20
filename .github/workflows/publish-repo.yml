@@ -1,14 +1,9 @@
 name: Publish pacman repository
 
 # Publishes the signed [nodalix] pacman repository to GitHub Pages.
-# Browser updates are published automatically only from a successful, current
-# main-branch CI candidate, after the reviewed Brújula PKGBUILD is merged.
-# Manual publication of any successful main-branch CI run remains supported.
+# The full release set is published manually from a successful main CI run.
+# Browser-only updates use the separate brujula-package.yml pipeline.
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       candidate_run:
@@ -27,10 +22,7 @@ jobs:
   preflight:
     if: >-
       github.repository == 'getnodalia/nodalix-os' &&
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success'))
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -43,7 +35,7 @@ jobs:
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
-          CANDIDATE_RUN: ${{ github.event.workflow_run.id || inputs.candidate_run }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: |
           set -euo pipefail
           [[ $CANDIDATE_RUN =~ ^[0-9]+$ ]] || exit 1
@@ -58,14 +50,6 @@ jobs:
             and .status == "completed"
             and .conclusion == "success"' <<<"$run" >/dev/null
           echo "candidate_run=$CANDIDATE_RUN" >> "$GITHUB_OUTPUT"
-          if [[ $GITHUB_EVENT_NAME == workflow_run ]]; then
-            files=$(gh api "repos/$GITHUB_REPOSITORY/commits/$main_sha" --jq '.files[].filename')
-            if ! grep -Fxq 'packaging/nodalix-brujula/PKGBUILD' <<<"$files"; then
-              echo 'No independent Brújula package update in the main commit'
-              echo 'publish=false' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
           echo 'publish=true' >> "$GITHUB_OUTPUT"
 
   build:
