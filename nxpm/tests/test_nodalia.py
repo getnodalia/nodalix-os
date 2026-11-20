@@ -360,3 +360,25 @@ def test_a_checksum_file_can_sit_beside_each_appimage(home):
     run(backend, "nodalia:vortia", "install")
     assert base + name + ".sha256" in opener.calls
     assert [p for p in backend.list_installed() if p.name == "Vortia"]
+
+
+def test_native_brujula_is_not_offered_as_an_appimage(home, catalog, monkeypatch):
+    monkeypatch.setattr(nodalia_module, "_native_brujula_present", lambda: True)
+    backend = NodaliaBackend(catalog, Opener())
+    assert "nodalia:brujula" not in [p.id for p in backend.list_catalog()]
+    with pytest.raises(NxpmError) as error:
+        run(backend, "nodalia:brujula", "install")
+    assert "paquete nativo" in error.value.message
+    assert not list(applications_dir().iterdir())
+
+
+def test_existing_appimage_can_be_removed_but_not_updated_when_native_exists(home, catalog, monkeypatch):
+    backend = NodaliaBackend(catalog, Opener())
+    run(backend, "nodalia:brujula", "install")
+    monkeypatch.setattr(nodalia_module, "_native_brujula_present", lambda: True)
+    assert "nodalia:brujula" in [p.id for p in backend.list_installed()]
+    assert "nodalia:brujula" not in [p.id for p in backend.list_updates()]
+    with pytest.raises(NxpmError):
+        run(backend, "nodalia:brujula", "update")
+    run(backend, "nodalia:brujula", "remove")
+    assert backend.list_installed() == []
