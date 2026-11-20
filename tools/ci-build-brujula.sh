@@ -5,7 +5,7 @@ set -euo pipefail
 [[ ${NODALIX_CI_CONTAINER:-} == 1 ]] || { echo 'CI container required' >&2; exit 1; }
 pacman -Syu --noconfirm
 pacman -S --needed --noconfirm base-devel git rust cargo pkgconf gtk4 webkitgtk-6.0 \
-  libsoup3 libsecret zstd python
+  libsoup3 libsecret zstd python python-yaml
 
 python3 -m unittest discover -s tests -p 'test_brujula*.py' -v
 
