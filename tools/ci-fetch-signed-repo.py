@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+from contextlib import closing
+from http.client import HTTPSConnection
 import os
 from pathlib import Path
 import re
@@ -15,10 +17,11 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-from urllib.parse import quote, urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import quote
 
-REPO_URL = "https://getnodalia.github.io/nodalix-os/x86_64"
+REPO_HOST = "getnodalia.github.io"
+REPO_PREFIX = "/nodalix-os/x86_64/"
+OUTPUT_DIR = Path("dist/published-packages")
 EXPECTED_KEY = "3DE029728CDE1828E18B437930D356AC0F6AB1CF"
 PUBLIC_KEY = Path("packaging/nodalix-keyring/nodalix-repo-key.pgp")
 BUDGET = 900 * 1024 * 1024
@@ -78,18 +81,45 @@ def parse_database(blob: bytes) -> list[dict[str, str | int]]:
     return sorted(entries, key=lambda row: str(row["filename"]))
 
 
-def fetch(url: str, path: Path, limit: int) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    request = Request(url, headers={"User-Agent": "Nodalix-signed-repository-publisher"})
-    with urlopen(request, timeout=180) as response:
-        if urlparse(response.geturl()).scheme != "https":
-            raise ValueError("HTTPS is required for repository downloads")
-        with path.open("wb") as output:
+def fetch(filename: str, destination: Path, limit: int) -> None:
+    """Get an exact repository file from the pinned TLS host without redirects.
+
+    Both the domain and destination directory are fixed by this script. Only
+    simple signed package filenames or the two database objects are allowed.
+    """
+    if not (
+        filename in {"nodalix.db", "nodalix.db.sig"}
+        or NAME.fullmatch(filename)
+        or (filename.endswith(".sig") and NAME.fullmatch(filename[:-4]))
+    ):
+        raise ValueError("Unexpected repository object name")
+    if not 0 < limit <= BUDGET:
+        raise ValueError("Invalid download limit")
+
+    # The target must be inside the two private, known output roots. Opening
+    # in exclusive mode prevents overwrites, including existing symlink paths.
+    if destination.parent != OUTPUT_DIR and destination.parent.name[:12] != "nodalix-repo-":
+        raise ValueError("Unexpected output path")
+    if destination.is_symlink():
+        raise ValueError("Refusing to write through a symlink")
+
+    with closing(HTTPSConnection(REPO_HOST, timeout=180)) as connection:
+        connection.request(
+            "GET", REPO_PREFIX + quote(filename, safe=""),
+            headers={"User-Agent": "Nodalix-signed-repository-publisher"},
+        )
+        response = connection.getresponse()
+        if response.status != 200:
+            raise ValueError(f"Repository returned HTTP {response.status} for {filename}")
+
+        # Never follow redirects. The TCP/TLS connection always targets our
+        # pinned GitHub Pages hostname and certificate verification is on.
+        with destination.open("xb") as output:
             count = 0
             while chunk := response.read(1024 * 1024):
                 count += len(chunk)
                 if count > limit:
-                    raise ValueError(f"Repository download exceeds expected size: {url}")
+                    raise ValueError(f"Repository object exceeds its size limit: {filename}")
                 output.write(chunk)
 
 
@@ -101,12 +131,12 @@ def gpg(args: list[str], env: dict[str, str]) -> str:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        raise SystemExit("Usage: ci-fetch-signed-repo.py OUTPUT_DIR")
-    output = Path(sys.argv[1])
-    if output.exists() and any(output.iterdir()):
-        raise ValueError(f"Output must be empty: {output}")
-    output.mkdir(parents=True, exist_ok=True)
+    if len(sys.argv) != 1:
+        raise SystemExit("Usage: ci-fetch-signed-repo.py")
+    output = OUTPUT_DIR
+    # A clean output directory is mandatory. Do not traverse symlinks or
+    # reuse artifacts from previous jobs.
+    output.mkdir(parents=True, exist_ok=False)
 
     with tempfile.TemporaryDirectory(prefix="nodalix-repo-") as directory:
         work = Path(directory)
@@ -123,23 +153,23 @@ def main() -> None:
 
         database = work / "nodalix.db"
         signature = work / "nodalix.db.sig"
-        fetch(f"{REPO_URL}/nodalix.db", database, 8 * 1024 * 1024)
-        fetch(f"{REPO_URL}/nodalix.db.sig", signature, 32768)
+        fetch("nodalix.db", database, 8 * 1024 * 1024)
+        fetch("nodalix.db.sig", signature, 32768)
         gpg(["--verify", str(signature), str(database)], env)
         entries = parse_database(database.read_bytes())
 
         for index, row in enumerate(entries, 1):
             filename = str(row["filename"])
             package = output / filename
-            url = f"{REPO_URL}/{quote(filename)}"
-            fetch(url, package, int(row["size"]))
+            fetch(filename, package, int(row["size"]))
             if package.stat().st_size != row["size"]:
                 raise ValueError(f"Package size mismatch: {filename}")
-            digest = hashlib.sha256(package.read_bytes()).hexdigest()
+            with package.open("rb") as file:
+                digest = hashlib.file_digest(file, "sha256").hexdigest()
             if digest != row["sha256"]:
                 raise ValueError(f"Package checksum mismatch: {filename}")
             detached = work / (filename + ".sig")
-            fetch(url + ".sig", detached, 32768)
+            fetch(filename + ".sig", detached, 32768)
             gpg(["--verify", str(detached), str(package)], env)
             print(f"Verified {index}/{len(entries)}: {filename}", flush=True)
 
