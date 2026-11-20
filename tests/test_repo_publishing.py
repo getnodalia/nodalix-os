@@ -14,23 +14,17 @@ TRIGGERS = WORKFLOW.get("on", WORKFLOW.get(True))
 
 
 class RepoPublishingTests(unittest.TestCase):
-    def test_workflow_accepts_only_manual_or_verified_main_ci(self):
-        self.assertEqual(set(TRIGGERS), {"workflow_dispatch", "workflow_run"})
-        trigger = TRIGGERS["workflow_run"]
-        self.assertEqual(trigger["workflows"], ["CI"])
-        self.assertEqual(trigger["types"], ["completed"])
-        self.assertEqual(trigger["branches"], ["main"])
+    def test_full_repository_publish_is_manual_only(self):
+        self.assertEqual(set(TRIGGERS), {"workflow_dispatch"})
         preflight = WORKFLOW["jobs"]["preflight"]
         self.assertIn("github.ref == 'refs/heads/main'", preflight["if"])
-        self.assertIn("github.event.workflow_run.conclusion == 'success'", preflight["if"])
         script = preflight["steps"][0]["run"]
         for condition in (
-            ".path == \".github/workflows/ci.yml\"",
+            '.path == ".github/workflows/ci.yml"',
             ".head_sha == $sha",
-            ".head_branch == \"main\"",
-            ".event == \"push\"",
-            ".conclusion == \"success\"",
-            "packaging/nodalix-brujula/PKGBUILD",
+            '.head_branch == "main"',
+            '.event == "push"',
+            '.conclusion == "success"',
         ):
             self.assertIn(condition, script)
 
