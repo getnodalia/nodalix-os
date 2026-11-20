@@ -1,6 +1,6 @@
 pkgname=nodalix-nxpm
 pkgver=0.6.1
-pkgrel=1
+pkgrel=2
 pkgdesc="Nodalix Package Manager: one service and command for Flatpak, official packages and user applications"
 arch=('any')
 url="https://github.com/getnodalia/nodalix-os"

@@ -54,6 +54,20 @@ _SUMS_LINE = re.compile(r"^([0-9a-fA-F]{64})\s+\*?(.+)$")
 _MAX_SUMS = 256 * 1024
 _MANAGER_TIMEOUT = 1800
 
+def _native_brujula_present() -> bool:
+    """A Nodalix-managed browser must never be duplicated through AppImage."""
+    try:
+        return subprocess.run(
+            ["pacman", "-Qq", "nodalix-brujula"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=4,
+        ).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 
 def catalog_location() -> Path:
     override = os.environ.get("NXPM_NODALIA_CATALOG")
@@ -140,7 +154,17 @@ class NodaliaBackend:
     def list_catalog(self) -> list[Package]:
         """Every Nodalia application, installed or not. Offline: uses what is cached."""
 
-        return [self._package(entry, self._cached(entry)) for entry in self._entries().values()]
+        # Keep a preexisting NXPM AppImage visible so the user can remove it,
+        # but do not propose another copy of the system-installed browser.
+        return [
+            self._package(entry, self._cached(entry))
+            for entry in self._entries().values()
+            if not (
+                entry["id"] == "brujula"
+                and _native_brujula_present()
+                and self._record("brujula") is None
+            )
+        ]
 
     def list_installed(self) -> list[Package]:
         return [package for package in self.list_catalog() if package.installed]
@@ -148,6 +172,8 @@ class NodaliaBackend:
     def list_updates(self) -> list[Package]:
         found = []
         for slug, entry in self._entries().items():
+            if slug == "brujula" and _native_brujula_present():
+                continue
             if self._record(slug) is None:
                 continue
             package = self._package(entry, self._fetch_latest(entry, quiet=True))
@@ -165,6 +191,12 @@ class NodaliaBackend:
     def apply(self, package_id: str, operation: str, progress) -> None:
         slug = _slug(package_id)
         entry = self._entry(slug)
+        if slug == "brujula" and operation in {"install", "update"} and _native_brujula_present():
+            raise NxpmError(
+                "unsupported",
+                "Brújula está instalada como paquete nativo de Nodalix. "
+                "Actualízala desde el sistema; no instales otra copia AppImage.",
+            )
         if entry["kind"] == "nodalix-apps":
             self._apply_managed(entry, operation, progress)
             return

@@ -1,4 +1,3 @@
-import hashlib
 import re
 import unittest
 from pathlib import Path
@@ -8,12 +7,25 @@ PKGBUILD = (ROOT / "packaging/nodalix-brujula/PKGBUILD").read_text(encoding="utf
 
 
 class BrujulaPackagingTests(unittest.TestCase):
-    def test_source_is_pinned_to_a_commit_with_a_real_checksum(self):
+    def test_source_is_pinned_to_a_git_commit(self):
         commit = re.search(r"^_brujula_commit=([0-9a-f]{40})$", PKGBUILD, re.M)
         self.assertTrue(commit, "the source must be pinned to a full commit")
-        self.assertIn("$_brujula_commit", PKGBUILD)
-        digest = re.search(r"^sha256sums=\('([0-9a-f]{64})'\)$", PKGBUILD, re.M)
-        self.assertTrue(digest, "sha256sums must hold a real checksum, not SKIP")
+        self.assertIn("#commit=$_brujula_commit", PKGBUILD)
+        self.assertIn("git+https://github.com/getnodalia/brujula.git", PKGBUILD)
+        # In makepkg, VCS sources are integrity-checked by the pinned Git commit,
+        # not by a non-reproducible archive SHA-256.
+        self.assertIn("sha256sums=('SKIP')", PKGBUILD)
+        self.assertNotIn("#tag=", PKGBUILD)
+        self.assertNotIn("#branch=", PKGBUILD)
+
+    def test_version_matches_component_manifest(self):
+        import json
+
+        version = re.search(r"^pkgver=([0-9]+\.[0-9]+\.[0-9]+)$", PKGBUILD, re.M)
+        self.assertIsNotNone(version)
+        rows = json.loads((ROOT / "release/components.json").read_text(encoding="utf-8"))["components"]
+        browser = next(row for row in rows if row["id"] == "brujula")
+        self.assertEqual(browser["version"], version.group(1))
 
     def test_it_replaces_the_unpinned_upstream_package(self):
         self.assertIn("conflicts=('brujula')", PKGBUILD)

@@ -1,8 +1,14 @@
 name: Publish pacman repository
 
-# Publishes the signed [nodalix] repository to GitHub Pages. It never runs on its own:
-# a person chooses a CI run whose packages passed and starts it by hand.
+# Publishes the signed [nodalix] pacman repository to GitHub Pages.
+# Browser updates are published automatically only from a successful, current
+# main-branch CI candidate, after the reviewed Brújula PKGBUILD is merged.
+# Manual publication of any successful main-branch CI run remains supported.
 on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       candidate_run:
@@ -18,11 +24,55 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    if: >-
+      github.repository == 'getnodalia/nodalix-os' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success'))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      publish: ${{ steps.check.outputs.publish }}
+      candidate_run: ${{ steps.check.outputs.candidate_run }}
+    steps:
+      - name: Validate the current main-branch CI candidate
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN: ${{ github.event.workflow_run.id || inputs.candidate_run }}
+        run: |
+          set -euo pipefail
+          [[ $CANDIDATE_RUN =~ ^[0-9]+$ ]] || exit 1
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN")
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$main_sha" '
+            .path == ".github/workflows/ci.yml"
+            and .head_repository.full_name == $repo
+            and .head_branch == "main"
+            and .head_sha == $sha
+            and .event == "push"
+            and .status == "completed"
+            and .conclusion == "success"' <<<"$run" >/dev/null
+          echo "candidate_run=$CANDIDATE_RUN" >> "$GITHUB_OUTPUT"
+          if [[ $GITHUB_EVENT_NAME == workflow_run ]]; then
+            files=$(gh api "repos/$GITHUB_REPOSITORY/commits/$main_sha" --jq '.files[].filename')
+            if ! grep -Fxq 'packaging/nodalix-brujula/PKGBUILD' <<<"$files"; then
+              echo 'No independent Brújula package update in the main commit'
+              echo 'publish=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo 'publish=true' >> "$GITHUB_OUTPUT"
+
   build:
-    # Only code on main may see the signing key. Keep NODALIX_REPO_GPG_KEY (and the optional
-    # NODALIX_REPO_GPG_PASSPHRASE) as secrets of this environment, not of the repository, and
-    # limit the environment to the main branch.
-    if: github.ref == 'refs/heads/main'
+    needs: preflight
+    # Only validated main CI candidates reach the signing environment.
+    if: needs.preflight.outputs.publish == 'true'
+    # Keep the repository signing secrets in the environment, main branch only.
     environment: nodalix-repo-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -36,12 +86,14 @@ jobs:
       - name: Require a successful CI run of this repository on main
         env:
           GH_TOKEN: ${{ github.token }}
-          CANDIDATE_RUN: ${{ inputs.candidate_run }}
+          CANDIDATE_RUN: ${{ needs.preflight.outputs.candidate_run }}
         run: |
           [[ $CANDIDATE_RUN =~ ^[0-9]+$ ]] || { echo 'candidate_run must be a numeric run id'; exit 1; }
           run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN")
-          jq -e --arg repo "$GITHUB_REPOSITORY" '
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$main_sha" '
             .path == ".github/workflows/ci.yml"
+            and .head_sha == $sha
             and .head_repository.full_name == $repo
             and .head_branch == "main"
             and .event == "push"
@@ -54,7 +106,7 @@ jobs:
         with:
           name: nodalix-0.4.0-candidate
           path: dist/packages
-          run-id: ${{ inputs.candidate_run }}
+          run-id: ${{ needs.preflight.outputs.candidate_run }}
           github-token: ${{ github.token }}
       - name: Sign the packages and build the repository
         env:
