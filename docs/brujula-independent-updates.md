@@ -63,12 +63,13 @@ It needs the previously established working Pages repository and signing
 environment. After the successful deploy, verify:
 
 ```fish
-sudo pacman -Sy
+sudo pacman -Syu --print
 sudo pacman -Si nodalix-brujula
 ```
 
-Do not use `pacman -Sy` as an excuse for a partial upgrade; install upgrades
-with `sudo pacman -Syu` after reviewing the proposed full transaction.
+The `--print` command synchronizes package databases and previews a full
+upgrade without installing it. Review the transaction, then use
+`sudo pacman -Syu` for a complete upgrade; never install a partial update.
 
 **Tradeoff:** GitHub Pages replaces the complete site on each deployment. The
 independent pipeline therefore downloads and verifies the existing package set
