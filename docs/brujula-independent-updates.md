@@ -23,31 +23,59 @@ between OS releases.
   installed, and refuses a duplicate install/update. It still permits removing
   a pre-existing NXPM AppImage.
 
-## Version flow
+## Version flow — browser-only CI
 
-1. The scheduled `sync-brujula.yml` checks the latest **stable** GitHub
-   release of `getnodalia/brujula`. It resolves the tag to an immutable
-   commit (including annotated tags) and changes only the browser PKGBUILD
-   and `release/components.json` if the version increases.
-2. The job proposes a PR and dispatches the existing CI on the PR branch.
-   Review is still required; automation must not turn unreviewed upstream
-   code into a privileged signed system package. On repositories that prevent
-   Actions-created PRs, enable that permission or use the manual path below.
-3. Once merged, successful **main** CI produces a complete package set. The
-   `publish-repo.yml` workflow detects that the main commit changed the
-   Brújula package, checks the candidate's repository, SHA, branch and
-   successful status, and publishes the whole signed `[nodalix]` pacman
-   repository through the protected `nodalix-repo-signing` environment.
-   This requires the existing signing key/environment and GitHub Pages to be
-   correctly configured. Do not disable repository signatures to work around
-   missing credentials or PGP errors.
-4. Machines then receive the updated `nodalix-brujula` through the usual
-   **full system upgrade**, with no new Nodalix ISO, VERSION bump or release
-   tag needed. The next Nodalix OS release continues to include the current
-   browser version in its component manifest.
+1. The scheduled `sync-brujula.yml` checks stable `getnodalia/brujula`
+   releases, resolves the immutable Git commit, and opens a reviewable PR.
+   The bot dispatches `brujula-package.yml` on its branch; no full Nodalix
+   kernel, GNOME package set, migrations or ISO build is needed for this check.
+2. `brujula-package.yml` builds **only** `nodalix-brujula` in an unprivileged
+   `makepkg` process inside a disposable Arch container. It checks the pinned
+   source/version, package files, desktop integration, manifest and browser
+   unit tests. Pull requests have **no access to the signing key**.
+3. Once reviewed and merged into `main`, the browser workflow runs again.
+   The signing job requires the current reviewed `main` SHA and the existing
+   `nodalix-repo-signing` protected environment. It downloads the **currently
+   published** `[nodalix]` repository from GitHub Pages, verifies the signed
+   database and **every existing package's detached PGP signature and SHA-256**
+   with the pinned Nodalix public key, rejects missing packages and downgrades,
+   and replaces only `nodalix-brujula`. The existing repository publisher
+   then re-signs the complete package set and deploys it to Pages. Publication
+   is serialized with full Nodalix repository publication.
+4. Machines get the updated native browser via normal `pacman -Syu`.
+   Nodalix OS `VERSION`, the kernel and the ISO **do not change**. WebKitGTK
+   security patches remain the responsibility of the distro package manager.
 
-The manual `Publish pacman repository` workflow remains available if automatic
-publication is blocked, with the id of a successful **main push** CI run.
+The full Nodalix OS `CI` skips **main pushes** that change only the Brújula
+PKGBUILD and its component version; it continues to validate all other OS
+changes and pull requests. The full-repository `publish-repo.yml` remains
+a **manual** workflow for a successful, current main-branch CI candidate and
+is no longer triggered just because Brújula changed. This prevents a full
+CI candidate from republishing an older browser over an independent release.
+
+### Manual first run (Brújula 0.10.0)
+
+The workflow file must be merged into `main` first. Then open
+**Actions → Build and publish Brújula independently → Run workflow → main**.
+This creates and validates Brújula 0.10.0 from the pinned source and publishes
+the signed package. It does **not** need a `candidate_run` or an ISO build.
+It needs the previously established working Pages repository and signing
+environment. After the successful deploy, verify:
+
+```fish
+sudo pacman -Sy
+sudo pacman -Si nodalix-brujula
+```
+
+Do not use `pacman -Sy` as an excuse for a partial upgrade; install upgrades
+with `sudo pacman -Syu` after reviewing the proposed full transaction.
+
+**Tradeoff:** GitHub Pages replaces the complete site on each deployment. The
+independent pipeline therefore downloads and verifies the existing package set
+(about 700 MB currently) and re-uploads it intact alongside the new browser.
+It avoids building the OS, but not the network bandwidth of Pages publication.
+If the published repository is unavailable, unsigned, incomplete or over the
+size budget, the deployment fails closed without touching the live site.
 
 ## Check or recover a Nodalix computer (fish)
 
