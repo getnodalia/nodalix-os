@@ -22,7 +22,7 @@ runuser -u browser-builder -- bash -c '
 '
 
 shopt -s nullglob
-candidates=(dist/brujula-package/nodalix-brujula-*.pkg.tar.zst)
+candidates=(dist/brujula-package/nodalix-brujula-[0-9]*.pkg.tar.zst)
 [[ ${#candidates[@]} == 1 ]] || { echo 'Expected exactly one native Brújula package' >&2; exit 1; }
 candidate=${candidates[0]}
 read -r name version < <(pacman -Qp -- "$candidate")
@@ -42,5 +42,6 @@ for owned in usr/bin/brujula usr/share/applications/dev.danielmiguelt.Brujula.de
   grep -Fxq "$owned" dist/brujula-package/CONTENTS || { echo "Missing $owned" >&2; exit 1; }
 done
 rm -f dist/brujula-package/CONTENTS
-(cd dist/brujula-package && sha256sum ./*.pkg.tar.zst > SHA256SUMS)
+# Hash only the validated runtime package, never a debug split package.
+(cd dist/brujula-package && sha256sum "${candidate##*/}" > SHA256SUMS)
 echo "Independently compiled native Brújula package: $candidate"
