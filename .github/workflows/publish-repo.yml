@@ -90,8 +90,10 @@ jobs:
         run: |
           [[ $CANDIDATE_RUN =~ ^[0-9]+$ ]] || { echo 'candidate_run must be a numeric run id'; exit 1; }
           run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN")
-          jq -e --arg repo "$GITHUB_REPOSITORY" '
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$main_sha" '
             .path == ".github/workflows/ci.yml"
+            and .head_sha == $sha
             and .head_repository.full_name == $repo
             and .head_branch == "main"
             and .event == "push"
