@@ -81,7 +81,7 @@ def parse_database(blob: bytes) -> list[dict[str, str | int]]:
     return sorted(entries, key=lambda row: str(row["filename"]))
 
 
-def fetch(filename: str, destination: Path, limit: int) -> None:
+def fetch(filename: str, destination: Path, limit: int, allowed_root: Path) -> None:
     """Get an exact repository file from the pinned TLS host without redirects.
 
     Both the domain and destination directory are fixed by this script. Only
@@ -98,7 +98,7 @@ def fetch(filename: str, destination: Path, limit: int) -> None:
 
     # The target must be inside the two private, known output roots. Opening
     # in exclusive mode prevents overwrites, including existing symlink paths.
-    if destination.parent != OUTPUT_DIR and destination.parent.name[:12] != "nodalix-repo-":
+    if destination.parent.resolve(strict=True) != allowed_root.resolve(strict=True):
         raise ValueError("Unexpected output path")
     if destination.is_symlink():
         raise ValueError("Refusing to write through a symlink")
@@ -153,15 +153,15 @@ def main() -> None:
 
         database = work / "nodalix.db"
         signature = work / "nodalix.db.sig"
-        fetch("nodalix.db", database, 8 * 1024 * 1024)
-        fetch("nodalix.db.sig", signature, 32768)
+        fetch("nodalix.db", database, 8 * 1024 * 1024, work)
+        fetch("nodalix.db.sig", signature, 32768, work)
         gpg(["--verify", str(signature), str(database)], env)
         entries = parse_database(database.read_bytes())
 
         for index, row in enumerate(entries, 1):
             filename = str(row["filename"])
             package = output / filename
-            fetch(filename, package, int(row["size"]))
+            fetch(filename, package, int(row["size"]), output)
             if package.stat().st_size != row["size"]:
                 raise ValueError(f"Package size mismatch: {filename}")
             with package.open("rb") as file:
@@ -169,7 +169,7 @@ def main() -> None:
             if digest != row["sha256"]:
                 raise ValueError(f"Package checksum mismatch: {filename}")
             detached = work / (filename + ".sig")
-            fetch(filename + ".sig", detached, 32768)
+            fetch(filename + ".sig", detached, 32768, work)
             gpg(["--verify", str(detached), str(package)], env)
             print(f"Verified {index}/{len(entries)}: {filename}", flush=True)
 
