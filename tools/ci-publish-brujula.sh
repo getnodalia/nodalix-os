@@ -18,7 +18,7 @@ expected=$(sed -n 's/^pkgver=//p' packaging/nodalix-brujula/PKGBUILD)
 
 # The current pacman database and each existing package are independently
 # checked against Nodalix's pinned public key before a replacement is allowed.
-python3 tools/ci-fetch-signed-repo.py dist/published-packages
+python3 tools/ci-fetch-signed-repo.py
 old=(dist/published-packages/nodalix-brujula-*.pkg.tar.zst)
 [[ ${#old[@]} == 1 ]] || { echo 'Published repository must contain Brújula' >&2; exit 1; }
 read -r old_name old_version < <(pacman -Qp -- "${old[0]}")
