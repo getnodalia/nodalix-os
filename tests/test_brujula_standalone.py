@@ -149,6 +149,17 @@ class StandaloneWorkflowTests(unittest.TestCase):
         self.assertIn('gpg(["--verify", str(signature), str(database)]', fetch)
         self.assertIn('gpg(["--verify", str(detached), str(package)]', fetch)
 
+    def test_split_debug_package_cannot_break_browser_selection(self):
+        package = (ROOT / "packaging/nodalix-brujula/PKGBUILD").read_text()
+        builder = (ROOT / "tools/ci-build-brujula.sh").read_text()
+        publisher = (ROOT / "tools/ci-publish-brujula.sh").read_text()
+        self.assertIn("!debug", package)
+        self.assertIn("nodalix-brujula-[0-9]*.pkg.tar.zst", builder)
+        self.assertIn("nodalix-brujula-[0-9]*.pkg.tar.zst", publisher)
+        self.assertIn('sha256sum "${candidate##*/}"', builder)
+        self.assertNotIn('nodalix-brujula-*.pkg.tar.zst', builder)
+        self.assertNotIn('nodalix-brujula-*.pkg.tar.zst', publisher)
+
     def test_upstream_sync_dispatches_targeted_ci(self):
         sync = (ROOT / ".github/workflows/sync-brujula.yml").read_text()
         self.assertIn('gh workflow run brujula-package.yml --ref "$branch"', sync)
