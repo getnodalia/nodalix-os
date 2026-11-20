@@ -21,7 +21,7 @@ class BrujulaPackagingTests(unittest.TestCase):
     def test_version_matches_component_manifest(self):
         import json
 
-        version = re.search(r"^pkgver=([0-9]+\\.[0-9]+\\.[0-9]+)$", PKGBUILD, re.M)
+        version = re.search(r"^pkgver=([0-9]+\.[0-9]+\.[0-9]+)$", PKGBUILD, re.M)
         self.assertIsNotNone(version)
         rows = json.loads((ROOT / "release/components.json").read_text(encoding="utf-8"))["components"]
         browser = next(row for row in rows if row["id"] == "brujula")
