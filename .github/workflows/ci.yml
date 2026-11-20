@@ -3,6 +3,11 @@ name: CI
 on:
   push:
     branches: [main, gnome-first]
+    # A browser-only release uses brujula-package.yml instead of building
+    # a new kernel, full GNOME package set and installable Nodalix ISO.
+    paths-ignore:
+      - packaging/nodalix-brujula/PKGBUILD
+      - release/components.json
   pull_request:
   workflow_dispatch:
     inputs:
