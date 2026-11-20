@@ -46,9 +46,9 @@ between OS releases.
    Nodalix OS `VERSION`, the kernel and the ISO **do not change**. WebKitGTK
    security patches remain the responsibility of the distro package manager.
 
-The full Nodalix OS `CI` skips **main pushes** that change only the Brújula
-PKGBUILD and its component version; it continues to validate all other OS
-changes and pull requests. The full-repository `publish-repo.yml` remains
+The full Nodalix OS `CI` skips **pushes to main and PRs** that change only
+the Brújula PKGBUILD and its component version; it continues to validate other
+OS changes. Browser PRs use the dedicated, targeted workflow instead. The full-repository `publish-repo.yml` remains
 a **manual** workflow for a successful, current main-branch CI candidate and
 is no longer triggered just because Brújula changed. This prevents a full
 CI candidate from republishing an older browser over an independent release.
