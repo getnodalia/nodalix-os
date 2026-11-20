@@ -84,6 +84,8 @@ class StandaloneWorkflowTests(unittest.TestCase):
         triggers = ci.get("on", ci.get(True))
         self.assertIn("packaging/nodalix-brujula/PKGBUILD", triggers["push"]["paths-ignore"])
         self.assertIn("release/components.json", triggers["push"]["paths-ignore"])
+        self.assertIn("packaging/nodalix-brujula/PKGBUILD", triggers["pull_request"]["paths-ignore"])
+        self.assertIn("release/components.json", triggers["pull_request"]["paths-ignore"])
 
     def test_only_deploy_receives_pages_permissions(self):
         for name, job in self.workflow["jobs"].items():
