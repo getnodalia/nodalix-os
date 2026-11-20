@@ -1,0 +1,56 @@
+name: Track independent Brújula releases
+
+# Release detection is independent of the Nodalix ISO/version. Do not build or
+# publish a new browser from unreviewed upstream input: propose a pinned update.
+on:
+  schedule:
+    - cron: '41 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: sync-stable-brujula
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    if: github.repository == 'getnodalia/nodalix-os' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: true
+      - name: Resolve the latest stable Brújula tag and immutable commit
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/sync-brujula-release.py
+      - name: Open a reviewable browser-only update
+        if: steps.source.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          set -euo pipefail
+          [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          branch="automation/brujula-v$VERSION"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "Existing update branch $branch; no duplicate PR created"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add packaging/nodalix-brujula/PKGBUILD release/components.json
+          git commit -m "chore(brujula): sync upstream v$VERSION"
+          git push origin "HEAD:refs/heads/$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore(brujula): update to $VERSION independently of Nodalix" \
+            --body "Automated proposal from the latest stable getnodalia/brujula GitHub Release. The PKGBUILD pins the exact Git commit, not a floating tag. Review upstream changes, run CI and merge only after validation. The signed pacman repository is published after a successful main-branch CI run without changing the Nodalix OS version or ISO."
+          # GITHUB_TOKEN-created PRs do not start pull_request workflows. Explicit
+          # dispatch runs the existing CI on the exact proposed branch instead.
+          gh workflow run ci.yml --ref "$branch"
