@@ -35,10 +35,12 @@ data = json.load(open("release/components.json", encoding="utf-8"))
 browser = next(row for row in data["components"] if row["id"] == "brujula")
 assert browser["version"] == sys.argv[1] and browser["package"] == "nodalix-brujula"
 PY
+bsdtar -tf "$candidate" > dist/brujula-package/CONTENTS
 for owned in usr/bin/brujula usr/share/applications/dev.danielmiguelt.Brujula.desktop \
   usr/share/icons/hicolor/scalable/apps/dev.danielmiguelt.Brujula.svg \
   etc/xdg/gnome-mimeapps.list; do
-  bsdtar -tf "$candidate" | grep -Fxq "$owned" || { echo "Missing $owned" >&2; exit 1; }
+  grep -Fxq "$owned" dist/brujula-package/CONTENTS || { echo "Missing $owned" >&2; exit 1; }
 done
+rm -f dist/brujula-package/CONTENTS
 (cd dist/brujula-package && sha256sum ./*.pkg.tar.zst > SHA256SUMS)
 echo "Independently compiled native Brújula package: $candidate"
