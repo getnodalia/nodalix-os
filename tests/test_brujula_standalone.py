@@ -3,6 +3,7 @@ import importlib.util
 import io
 from pathlib import Path
 import tarfile
+import tempfile
 import unittest
 
 import yaml
@@ -61,6 +62,38 @@ class SignedBaselineTests(unittest.TestCase):
     def test_corrupt_database_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Invalid"):
             baseline.parse_database(b"not a pacman database")
+
+    def test_repository_filename_validation_rejects_redirectable_urls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            for filename in (
+                "https://example.org/private",
+                "../secrets.pkg.tar.zst",
+                "evil.pkg.tar.zst/../../passwd",
+                "nodalix.db?redirect=1",
+            ):
+                with self.subTest(filename=filename):
+                    with self.assertRaisesRegex(ValueError, "Unexpected repository object"):
+                        baseline.fetch(filename, work / "unused", 1024, work)
+
+    def test_repository_download_rejects_output_path_outside_fixed_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            allowed = work / "trusted"
+            allowed.mkdir()
+            with self.assertRaisesRegex(ValueError, "Unexpected output path"):
+                baseline.fetch("nodalix.db", work / "outside", 1024, allowed)
+
+    def test_repository_download_rejects_symlink_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            target = work / "target"
+            target.write_bytes(b"untouched")
+            link = work / "nodalix.db"
+            link.symlink_to(target)
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                baseline.fetch("nodalix.db", link, 1024, work)
+            self.assertEqual(target.read_bytes(), b"untouched")
 
 
 class StandaloneWorkflowTests(unittest.TestCase):
