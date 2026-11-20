@@ -70,11 +70,9 @@ jobs:
 
   build:
     needs: preflight
+    # Only validated main CI candidates reach the signing environment.
     if: needs.preflight.outputs.publish == 'true'
-    # Only code on main may see the signing key. Keep NODALIX_REPO_GPG_KEY (and the optional
-    # NODALIX_REPO_GPG_PASSPHRASE) as secrets of this environment, not of the repository, and
-    # limit the environment to the main branch.
-    if: github.ref == 'refs/heads/main'
+    # Keep the repository signing secrets in the environment, main branch only.
     environment: nodalix-repo-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 30
