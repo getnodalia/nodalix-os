@@ -1,6 +1,7 @@
 # Brújula, the Nodalix web browser (Rust, WebKit, Nodalia Design Language), built from
 # getnodalia/brujula pinned to a verified release commit. The independent
 # browser package version is not tied to the Nodalix OS VERSION.
+# Standalone build and signed publication: .github/workflows/brujula-package.yml.
 pkgname=nodalix-brujula
 pkgver=0.10.0
 pkgrel=1
