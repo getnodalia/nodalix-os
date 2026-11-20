@@ -14,8 +14,25 @@ TRIGGERS = WORKFLOW.get("on", WORKFLOW.get(True))
 
 
 class RepoPublishingTests(unittest.TestCase):
-    def test_workflow_only_runs_when_a_person_starts_it(self):
-        self.assertEqual(set(TRIGGERS), {"workflow_dispatch"})
+    def test_workflow_accepts_only_manual_or_verified_main_ci(self):
+        self.assertEqual(set(TRIGGERS), {"workflow_dispatch", "workflow_run"})
+        trigger = TRIGGERS["workflow_run"]
+        self.assertEqual(trigger["workflows"], ["CI"])
+        self.assertEqual(trigger["types"], ["completed"])
+        self.assertEqual(trigger["branches"], ["main"])
+        preflight = WORKFLOW["jobs"]["preflight"]
+        self.assertIn("github.ref == 'refs/heads/main'", preflight["if"])
+        self.assertIn("github.event.workflow_run.conclusion == 'success'", preflight["if"])
+        script = preflight["steps"][0]["run"]
+        for condition in (
+            ".path == \".github/workflows/ci.yml\"",
+            ".head_sha == $sha",
+            ".head_branch == \"main\"",
+            ".event == \"push\"",
+            ".conclusion == \"success\"",
+            "packaging/nodalix-brujula/PKGBUILD",
+        ):
+            self.assertIn(condition, script)
 
     def test_deploy_job_alone_gets_pages_permissions(self):
         for name, job in WORKFLOW["jobs"].items():
@@ -25,7 +42,9 @@ class RepoPublishingTests(unittest.TestCase):
 
     def test_signing_runs_only_on_main_inside_a_protected_environment(self):
         build = WORKFLOW["jobs"]["build"]
-        self.assertEqual(build["if"], "github.ref == 'refs/heads/main'")
+        self.assertEqual(build["if"], "needs.preflight.outputs.publish == 'true'")
+        self.assertEqual(build["needs"], "preflight")
+        self.assertIn("github.ref == 'refs/heads/main'", WORKFLOW["jobs"]["preflight"]["if"])
         self.assertEqual(build["environment"], "nodalix-repo-signing")
 
     def test_candidate_run_is_validated_before_signing(self):
