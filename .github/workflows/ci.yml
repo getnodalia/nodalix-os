@@ -9,6 +9,11 @@ on:
       - packaging/nodalix-brujula/PKGBUILD
       - release/components.json
   pull_request:
+    # Browser-only PRs are validated by brujula-package.yml. Changes to
+    # workflows, the OS or other packages still run the full CI.
+    paths-ignore:
+      - packaging/nodalix-brujula/PKGBUILD
+      - release/components.json
   workflow_dispatch:
     inputs:
       candidate_run:
