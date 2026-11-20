@@ -22,14 +22,14 @@ COMPONENTS = ROOT / "release/components.json"
 
 
 def fetch_json(url: str) -> dict:
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "Nodalix-Brujula-Release-Sync",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "Nodalix-Brujula-Release-Sync",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if os.environ.get("GH_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GH_TOKEN']}"
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=20) as response:
         result = json.load(response)
     if not isinstance(result, dict):
