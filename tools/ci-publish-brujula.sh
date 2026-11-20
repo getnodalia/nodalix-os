@@ -7,7 +7,7 @@ pacman -Syu --noconfirm
 pacman -S --needed --noconfirm python gnupg
 
 shopt -s nullglob
-candidates=(dist/brujula-package/nodalix-brujula-*.pkg.tar.zst)
+candidates=(dist/brujula-package/nodalix-brujula-[0-9]*.pkg.tar.zst)
 [[ ${#candidates[@]} == 1 ]] || { echo 'Expected one candidate' >&2; exit 1; }
 candidate=${candidates[0]}
 (cd dist/brujula-package && sha256sum -c SHA256SUMS)
@@ -19,7 +19,7 @@ expected=$(sed -n 's/^pkgver=//p' packaging/nodalix-brujula/PKGBUILD)
 # The current pacman database and each existing package are independently
 # checked against Nodalix's pinned public key before a replacement is allowed.
 python3 tools/ci-fetch-signed-repo.py
-old=(dist/published-packages/nodalix-brujula-*.pkg.tar.zst)
+old=(dist/published-packages/nodalix-brujula-[0-9]*.pkg.tar.zst)
 [[ ${#old[@]} == 1 ]] || { echo 'Published repository must contain Brújula' >&2; exit 1; }
 read -r old_name old_version < <(pacman -Qp -- "${old[0]}")
 [[ $old_name == nodalix-brujula ]] || exit 1
