@@ -6,7 +6,7 @@ use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use archivador_core::bookmarks::{self, Bookmark};
-use archivador_core::clipboard::{Clipboard, Mode};
+use archivador_core::clipboard::{self, Clipboard, Mode};
 use archivador_core::cloud;
 use archivador_core::entry::{self, Entry, SortKey};
 use archivador_core::history::History;
@@ -153,6 +153,21 @@ fn is_trash(path: &Path) -> bool {
 
 fn is_recent(path: &Path) -> bool {
     path == Path::new(RECENT)
+}
+
+/// A popover menu that is taller than the room it has (a small window) scrolls, and with the
+/// overlay scrollbars of GTK nothing says so: the last entries, "Move to the trash" among them,
+/// look cut off. Makes its scrollbar a permanent one.
+fn show_scrollbar(widget: &gtk::Widget) {
+    if let Some(scrolled) = widget.downcast_ref::<gtk::ScrolledWindow>() {
+        scrolled.set_overlay_scrolling(false);
+        return;
+    }
+    let mut child = widget.first_child();
+    while let Some(widget) = child {
+        show_scrollbar(&widget);
+        child = widget.next_sibling();
+    }
 }
 
 /// A place that is not a folder on disk, so nothing is made, pasted or dropped in it.
@@ -1181,6 +1196,11 @@ impl Browser {
             edit.append_item(&item(tr("Copy"), "win.copy", "edit-copy-symbolic"));
             edit.append_item(&item(tr("Cut"), "win.cut", "edit-cut-symbolic"));
             edit.append_item(&item(tr("Rename…"), "win.rename", "document-edit-symbolic"));
+            edit.append_item(&item(
+                tr("Copy location"),
+                "win.copy-path",
+                "edit-copy-symbolic",
+            ));
             if let Some(folder) = self.selected_folder() {
                 let pinned = load_bookmarks().iter().any(|b| b.path == folder);
                 edit.append_item(&item(
@@ -1232,6 +1252,11 @@ impl Browser {
             ));
             section.append_item(&item(tr("Paste"), "win.paste", "edit-paste-symbolic"));
             section.append_item(&item(
+                tr("Copy location"),
+                "win.copy-path",
+                "edit-copy-symbolic",
+            ));
+            section.append_item(&item(
                 tr("Select all"),
                 "win.select-all",
                 "edit-select-all-symbolic",
@@ -1273,6 +1298,7 @@ impl Browser {
         }
         let popover = gtk::PopoverMenu::from_model(Some(&self.context_model(on_files)));
         ndl::menu_rows(&popover);
+        show_scrollbar(popover.upcast_ref());
         popover.set_parent(parent);
         popover.set_has_arrow(false);
         popover.set_halign(gtk::Align::Start);
@@ -1349,6 +1375,7 @@ impl Browser {
         self.action("rename", Self::rename);
         self.action("copy", |t| t.to_clipboard(Mode::Copy));
         self.action("cut", |t| t.to_clipboard(Mode::Cut));
+        self.action("copy-path", Self::copy_location);
         self.action("paste", Self::paste);
         self.action("trash", Self::trash_selected);
         self.action("delete", Self::delete_selected);
@@ -1492,6 +1519,8 @@ impl Browser {
         self.set_enabled("properties", some && !in_trash);
         self.set_enabled("copy", some && !in_trash);
         self.set_enabled("cut", some && !in_trash);
+        // The selection's paths, or the folder's own when nothing is selected.
+        self.set_enabled("copy-path", !in_trash && (some || !in_virtual));
         self.set_enabled("rename", selected == 1 && !in_trash);
         self.set_enabled("trash", some && !in_trash);
         self.set_enabled("send", some && !in_trash);
@@ -2509,6 +2538,23 @@ impl Browser {
             .clipboard()
             .set_content(Some(&transfer::clipboard_content(mode, &paths)));
         self.update_actions();
+    }
+
+    /// "Copy location": the full path of what is selected, one per line, or of the folder that is
+    /// open when nothing is selected, as plain text for a terminal, an editor or a dialog.
+    fn copy_location(&self) {
+        let mut paths: Vec<PathBuf> = self.selected().into_iter().map(|e| e.path).collect();
+        if paths.is_empty() {
+            let dir = self.current_dir();
+            if is_virtual(&dir) {
+                return;
+            }
+            paths.push(dir);
+        }
+        self.window
+            .clipboard()
+            .set_text(&clipboard::locations_text(&paths));
+        self.toast(tr("Location copied"));
     }
 
     fn paste(self: &Rc<Self>) {

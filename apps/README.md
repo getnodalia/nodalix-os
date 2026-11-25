@@ -1,7 +1,7 @@
 # Native Nodalix apps
 
 Apps written for Nodalix OS in Rust on GTK 4 with the
-[Nodalia Design Language](https://github.com/danielmigueltejedor/nodalia-design) (`nodalia-gtk`,
+[Nodalia Design Language](https://github.com/getnodalia/nodalia-design) (`nodalia-gtk`,
 no libadwaita), so that every core app looks and behaves the same.
 
 | App | Directory | Replaces |
