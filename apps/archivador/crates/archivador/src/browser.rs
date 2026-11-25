@@ -53,6 +53,8 @@ struct State {
     select: Vec<PathBuf>,
     /// The folder could not be read.
     error: Option<String>,
+    /// The place is being read off the main thread and nothing is there to show yet.
+    loading: bool,
 }
 
 /// One segment of the path bar: the arrow before it, the button, and where it leads.
@@ -98,6 +100,8 @@ pub struct Browser {
     state: RefCell<State>,
     monitor: RefCell<Option<gio::FileMonitor>>,
     reload_queued: Cell<bool>,
+    /// Which reading of the recent files is the latest; an older one that finishes late is dropped.
+    recent_reads: Cell<u64>,
     syncing: Cell<bool>,
     /// The cloud accounts in the sidebar, as Settings listed them.
     clouds: RefCell<Vec<cloud::Account>>,
@@ -209,24 +213,9 @@ fn save_servers(list: &[String]) {
     let _ = std::fs::write(file, servers::serialize(list));
 }
 
-/// The files the desktop says were opened lately, newest visit first by their time.
-fn recent_entries() -> Vec<Entry> {
-    let items = gtk::RecentManager::default()
-        .items()
-        .into_iter()
-        .filter_map(|info| {
-            let path = gio::File::for_uri(&info.uri()).path()?;
-            // A share or a phone reached through GVfs: looking at it can take as long as the
-            // network does, with the window waiting, so it is not listed.
-            if path.components().any(|c| c.as_os_str() == "gvfs") {
-                return None;
-            }
-            let visited = u64::try_from(info.visited().to_unix())
-                .ok()
-                .map(|secs| std::time::UNIX_EPOCH + Duration::from_secs(secs));
-            Some(recent::Item { path, visited })
-        });
-    recent::entries(items)
+/// Where the desktop keeps the list of the files opened lately.
+fn recent_list() -> PathBuf {
+    glib::user_data_dir().join("recently-used.xbel")
 }
 
 fn settings_file() -> PathBuf {
@@ -428,9 +417,11 @@ impl Browser {
                 search: String::new(),
                 select: Vec::new(),
                 error: None,
+                loading: false,
             }),
             monitor: RefCell::new(None),
             reload_queued: Cell::new(false),
+            recent_reads: Cell::new(0),
             syncing: Cell::new(false),
             clouds: RefCell::new(Vec::new()),
             pressed: RefCell::new(Vec::new()),
@@ -453,7 +444,7 @@ impl Browser {
     }
 
     /// Selects `paths` once the folder has been read.
-    pub fn select_after_load(&self, paths: Vec<PathBuf>) {
+    pub fn select_after_load(self: &Rc<Self>, paths: Vec<PathBuf>) {
         self.state.borrow_mut().select = paths;
         self.reload();
     }
@@ -1749,6 +1740,10 @@ impl Browser {
         let dir = self.current_dir();
         self.state.borrow_mut().search.clear();
         self.search_entry.set_text("");
+        if is_recent(&dir) {
+            // What the last place left behind is not this one's.
+            self.state.borrow_mut().entries.clear();
+        }
         self.read(&dir);
         self.watch(&dir);
         self.show_title(&dir);
@@ -1758,7 +1753,7 @@ impl Browser {
     }
 
     /// Reads the folder again, keeping what is selected.
-    fn reload(&self) {
+    fn reload(self: &Rc<Self>) {
         let dir = self.current_dir();
         if self.state.borrow().select.is_empty() {
             let kept: Vec<PathBuf> = self.selected().into_iter().map(|e| e.path).collect();
@@ -1768,16 +1763,21 @@ impl Browser {
         self.sync_sidebar();
     }
 
-    fn read(&self, dir: &Path) {
+    fn read(self: &Rc<Self>, dir: &Path) {
+        // Whatever reading of the recent files is still running is for a place we may have left.
+        self.recent_reads.set(self.recent_reads.get() + 1);
+        if is_recent(dir) {
+            self.read_recent();
+            return;
+        }
         let result = if is_trash(dir) {
             Ok(trash().entries())
-        } else if is_recent(dir) {
-            Ok(recent_entries())
         } else {
             entry::read_dir(dir)
         };
         {
             let mut state = self.state.borrow_mut();
+            state.loading = false;
             match result {
                 Ok(entries) => {
                     state.entries = entries;
@@ -1790,6 +1790,48 @@ impl Browser {
             }
         }
         self.repopulate();
+    }
+
+    /// Reads the recent files off the main thread. The list can hold thousands and each file that
+    /// is listed has to be looked at on the disk, which on a mount that went away can take as long
+    /// as the network: the window stays alive meanwhile and shows them when they are there.
+    fn read_recent(self: &Rc<Self>) {
+        let read = self.recent_reads.get();
+        {
+            let mut state = self.state.borrow_mut();
+            state.error = None;
+            // What is already shown stays until the new list is ready; only an empty window says
+            // that it is loading.
+            state.loading = state.entries.is_empty();
+        }
+        if self.state.borrow().loading {
+            self.repopulate();
+        }
+        let this = self.weak();
+        let list = recent_list();
+        glib::spawn_future_local(async move {
+            let Some(browser) = this.upgrade() else {
+                return;
+            };
+            browser.working(true);
+            let entries = gio::spawn_blocking(move || recent::load(&list)).await;
+            browser.working(false);
+            if browser.recent_reads.get() != read || !is_recent(&browser.current_dir()) {
+                return;
+            }
+            {
+                let mut state = browser.state.borrow_mut();
+                state.loading = false;
+                match entries {
+                    Ok(entries) => state.entries = entries,
+                    Err(_) => {
+                        state.entries.clear();
+                        state.error = Some(tr("Can't read the recent files").to_owned());
+                    }
+                }
+            }
+            browser.repopulate();
+        });
     }
 
     fn watch(self: &Rc<Self>, dir: &Path) {
@@ -1833,7 +1875,7 @@ impl Browser {
     fn repopulate(&self) {
         let dir = self.current_dir();
         let in_trash = is_trash(&dir);
-        let (shown, select, view, searching, error) = {
+        let (shown, select, view, searching, error, loading) = {
             let mut state = self.state.borrow_mut();
             let s = state.settings;
             let mut shown: Vec<Entry> = state
@@ -1854,6 +1896,7 @@ impl Browser {
                 s.view,
                 !state.search.is_empty(),
                 state.error.clone(),
+                state.loading,
             )
         };
         let objects: Vec<FileObject> = shown.iter().cloned().map(FileObject::new).collect();
@@ -1921,7 +1964,11 @@ impl Browser {
             } else if is_recent(&dir) {
                 (
                     "document-open-recent-symbolic",
-                    tr("No recent files"),
+                    tr(if loading {
+                        "Loading recent files…"
+                    } else {
+                        "No recent files"
+                    }),
                     String::new(),
                 )
             } else {

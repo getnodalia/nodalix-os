@@ -26,6 +26,11 @@ const ES: &[(&str, &str)] = &[
     ("Green", "Verde"),
     ("Graphite", "Grafito"),
     ("No recent files", "No hay archivos recientes"),
+    ("Loading recent files…", "Cargando archivos recientes…"),
+    (
+        "Can't read the recent files",
+        "No se pueden leer los archivos recientes",
+    ),
     ("Favorites", "Favoritos"),
     ("Add to Favorites", "Añadir a Favoritos"),
     ("Remove from Favorites", "Quitar de Favoritos"),
