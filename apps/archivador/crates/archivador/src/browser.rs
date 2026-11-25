@@ -155,6 +155,21 @@ fn is_recent(path: &Path) -> bool {
     path == Path::new(RECENT)
 }
 
+/// A popover menu that is taller than the room it has (a small window) scrolls, and with the
+/// overlay scrollbars of GTK nothing says so: the last entries, "Move to the trash" among them,
+/// look cut off. Makes its scrollbar a permanent one.
+fn show_scrollbar(widget: &gtk::Widget) {
+    if let Some(scrolled) = widget.downcast_ref::<gtk::ScrolledWindow>() {
+        scrolled.set_overlay_scrolling(false);
+        return;
+    }
+    let mut child = widget.first_child();
+    while let Some(widget) = child {
+        show_scrollbar(&widget);
+        child = widget.next_sibling();
+    }
+}
+
 /// A place that is not a folder on disk, so nothing is made, pasted or dropped in it.
 fn is_virtual(path: &Path) -> bool {
     is_trash(path) || is_recent(path)
@@ -1283,6 +1298,7 @@ impl Browser {
         }
         let popover = gtk::PopoverMenu::from_model(Some(&self.context_model(on_files)));
         ndl::menu_rows(&popover);
+        show_scrollbar(popover.upcast_ref());
         popover.set_parent(parent);
         popover.set_has_arrow(false);
         popover.set_halign(gtk::Align::Start);
