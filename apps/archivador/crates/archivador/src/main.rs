@@ -37,6 +37,7 @@ const ACCELS: &[(&str, &[&str])] = &[
     ("win.new-folder", &["<Ctrl><Shift>n"]),
     ("win.copy", &["<Ctrl>c"]),
     ("win.cut", &["<Ctrl>x"]),
+    ("win.copy-path", &["<Ctrl><Shift>c"]),
     ("win.paste", &["<Ctrl>v"]),
     ("win.select-all", &["<Ctrl>a"]),
     ("win.rename", &["F2"]),

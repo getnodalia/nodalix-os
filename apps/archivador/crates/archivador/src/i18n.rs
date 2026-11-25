@@ -88,6 +88,8 @@ const ES: &[(&str, &str)] = &[
     ("Untitled folder", "Carpeta sin título"),
     ("Open", "Abrir"),
     ("Copy", "Copiar"),
+    ("Copy location", "Copiar ubicación"),
+    ("Location copied", "Ubicación copiada"),
     ("Cut", "Cortar"),
     ("Paste", "Pegar"),
     ("Rename…", "Cambiar nombre…"),

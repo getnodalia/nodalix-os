@@ -18,6 +18,16 @@ pub struct Clipboard {
     pub paths: Vec<PathBuf>,
 }
 
+/// The full paths of `paths` as text, one per line and without a final newline, ready to paste
+/// into a terminal, an editor or a dialog. This is what "Copy location" puts on the clipboard.
+pub fn locations_text(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|path| path.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 impl Clipboard {
     pub fn new(mode: Mode, paths: Vec<PathBuf>) -> Self {
         Self { mode, paths }
@@ -51,6 +61,19 @@ impl Clipboard {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn locations_are_full_paths_one_per_line() {
+        assert_eq!(locations_text(&[]), "");
+        assert_eq!(
+            locations_text(&[PathBuf::from("/home/ana/My file.txt")]),
+            "/home/ana/My file.txt"
+        );
+        assert_eq!(
+            locations_text(&[PathBuf::from("/home/ana/a"), PathBuf::from("/tmp/b c")]),
+            "/home/ana/a\n/tmp/b c"
+        );
+    }
 
     fn temp(name: &str) -> PathBuf {
         let dir =
