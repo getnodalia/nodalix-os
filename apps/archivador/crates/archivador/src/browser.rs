@@ -1375,7 +1375,7 @@ impl Browser {
         self.action("rename", Self::rename);
         self.action("copy", |t| t.to_clipboard(Mode::Copy));
         self.action("cut", |t| t.to_clipboard(Mode::Cut));
-        self.action("copy-path", Self::copy_location);
+        self.action("copy-path", |t| t.copy_location());
         self.action("paste", Self::paste);
         self.action("trash", Self::trash_selected);
         self.action("delete", Self::delete_selected);
