@@ -1,7 +1,7 @@
 # Archivador
 
 The file manager of Nodalix OS, written in Rust on GTK 4 with the
-[Nodalia Design Language](https://github.com/danielmigueltejedor/nodalia-design) through the
+[Nodalia Design Language](https://github.com/getnodalia/nodalia-design) through the
 `nodalia-gtk` crate. It does not use libadwaita and it is not a theme over Nautilus: it is its own
 app that follows Nautilus where Nautilus is right (trash layout, behaviour of cut and paste,
 sorting) and goes its own way elsewhere.

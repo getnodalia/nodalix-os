@@ -1,7 +1,7 @@
 # Nodalix Settings
 
 The settings app of Nodalix OS, written in Rust on GTK 4 with the
-[Nodalia Design Language](https://github.com/danielmigueltejedor/nodalia-design) through the
+[Nodalia Design Language](https://github.com/getnodalia/nodalia-design) through the
 `nodalia-gtk` crate. It does not use libadwaita. It replaces the GNOME Control Center that
 Nodalix has been shipping with its own pages.
 

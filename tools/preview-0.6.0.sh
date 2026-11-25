@@ -22,7 +22,7 @@ apps_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 icons_dir="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
 brujula_dir="${BRUJULA_DIR:-$(dirname -- "$root")/brujula}"
 brujula_ref="${BRUJULA_REF:-main}"   # rama de Brújula a probar (por defecto main)
-brujula_url="${BRUJULA_URL:-https://github.com/danielmigueltejedor/brujula.git}"
+brujula_url="${BRUJULA_URL:-https://github.com/getnodalia/brujula.git}"
 backup_dir="$HOME/Respaldos/nodalix-pre-0.6.0-preview-$(date +%F)"
 brujula_desktop=dev.danielmiguelt.Brujula.desktop
 

@@ -1,7 +1,7 @@
 # Diseño NDL en las apps de Nodalix OS
 
 Nodalix 0.6.0 lleva el lenguaje de diseño de Nodalia
-([NDL](https://github.com/danielmigueltejedor/nodalia-design)) a las apps
+([NDL](https://github.com/getnodalia/nodalia-design)) a las apps
 nativas del sistema. Las que ya son GTK/libadwaita lo adoptan por capas, como
 documenta NDL: se cargan sus hojas sobre libadwaita y no se reescribe la
 interfaz.
