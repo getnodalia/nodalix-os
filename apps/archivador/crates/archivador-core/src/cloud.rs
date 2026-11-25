@@ -151,6 +151,47 @@ pub fn is_mounted(mountinfo: &str, path: &Path) -> bool {
         .any(|point| unescape(point) == path.as_os_str().to_string_lossy())
 }
 
+/// The mount points, going by the text of `/proc/self/mountinfo`, whose files live on another
+/// machine: network file systems and the FUSE ones that reach a server (cloud drives, SSH, GVfs).
+/// Looking at a file there takes as long as the network does, and for ever if it dropped.
+pub fn remote_mounts(mountinfo: &str) -> Vec<PathBuf> {
+    const REMOTE: &[&str] = &[
+        "nfs",
+        "nfs4",
+        "cifs",
+        "smb3",
+        "smbfs",
+        "9p",
+        "afs",
+        "ceph",
+        "glusterfs",
+        "davfs",
+        "lustre",
+    ];
+    mountinfo
+        .lines()
+        .filter_map(|line| {
+            let (before, after) = line.split_once(" - ")?;
+            let point = before.split(' ').nth(4)?;
+            let kind = after.split(' ').next()?;
+            let remote = REMOTE.contains(&kind)
+                || kind.strip_prefix("fuse.").is_some_and(|fuse| {
+                    [
+                        "rclone",
+                        "sshfs",
+                        "gvfsd-fuse",
+                        "s3fs",
+                        "davfs2",
+                        "curlftpfs",
+                        "gcsfuse",
+                    ]
+                    .contains(&fuse)
+                });
+            remote.then(|| PathBuf::from(unescape(point)))
+        })
+        .collect()
+}
+
 /// The kernel writes a space, a tab, a newline and a backslash in a path as `\040`, `\011`,
 /// `\012` and `\134`.
 fn unescape(text: &str) -> String {
@@ -240,6 +281,24 @@ mod tests {
             assert_eq!(point.parent(), Some(Path::new("/home/u/Nube")));
             assert_ne!(point.file_name().unwrap(), "..");
         }
+    }
+
+    #[test]
+    fn remote_mounts_are_the_ones_on_a_network() {
+        let info = "36 35 98:0 / /home/u/Nube/My\\040Drive rw,nosuid - fuse.rclone remote rw\n\
+                    25 1 8:1 / / rw - ext4 /dev/sda1 rw\n\
+                    40 25 0:50 / /mnt/nas rw - nfs4 nas:/share rw\n\
+                    41 25 0:51 / /run/user/1000/gvfs rw - fuse.gvfsd-fuse gvfsd-fuse rw\n\
+                    42 25 0:52 / /mnt/usb rw - fuse.ntfs-3g /dev/sdb1 rw\n";
+        assert_eq!(
+            remote_mounts(info),
+            [
+                PathBuf::from("/home/u/Nube/My Drive"),
+                PathBuf::from("/mnt/nas"),
+                PathBuf::from("/run/user/1000/gvfs"),
+            ]
+        );
+        assert!(remote_mounts("").is_empty());
     }
 
     #[test]
