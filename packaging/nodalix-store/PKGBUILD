@@ -1,5 +1,5 @@
 pkgname=nodalix-store
-pkgver=0.6.1
+pkgver=0.6.2
 pkgrel=1
 # Nodalix Store is built from getnodalia/tienda,
 # pinned to an exact commit like every other external Nodalix source.
