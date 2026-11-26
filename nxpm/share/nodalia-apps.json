@@ -55,7 +55,7 @@
       "summary": "El cliente de correo de Nodalia: IMAP, POP3 y JMAP, sin telemetría.",
       "kind": "appimage",
       "repo": "getnodalia/buzon",
-      "asset": "Buzon-x86_64.AppImage",
+      "asset": "Buzon-*x86_64.AppImage",
       "checksums": "SHA256SUMS-linux",
       "icon": "dev.danielmiguelt.Buzon"
     }
