@@ -229,6 +229,24 @@ jobs:
       - name: Validate 0.2.4 to GNOME through the updater bridge
         run: docker run --rm -e NODALIX_CI_CONTAINER=1 -v "$PWD":/src -w /src archlinux:latest bash -c "bash tools/ci-migrate-024.sh && bash tools/ci-boot-migrated.sh"
 
+      - name: Fetch historical releases with read-only GitHub token
+        # tools/ci-upgrade-history.py reads this file; the token stays out of the container that
+        # runs historical package hooks (same step as ci.yml).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/history-input
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > dist/history-input/releases.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          releases = json.loads(Path("dist/history-input/releases.json").read_text())
+          if not isinstance(releases, list):
+              raise SystemExit("GitHub release index is not a JSON list")
+          print(f"Loaded {len(releases)} releases from authenticated GitHub API")
+          PY
+
       - name: Validate every earlier published version including betas
         run: docker run --rm -e NODALIX_CI_CONTAINER=1 -v "$PWD":/src -w /src archlinux:latest bash -c 'pacman -Syu --noconfirm python && python tools/ci-upgrade-history.py'
 
